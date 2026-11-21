@@ -1,4 +1,4 @@
-# DAILY. — a 160-character journal
+# CRANBERRY. — a 160-character journal
 ```
 npm install
 npm run dev      # http://localhost:5173
