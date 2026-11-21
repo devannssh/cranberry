@@ -1,13 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import EntryCard from './EntryCard.jsx'
+import { tickRun, cadence } from '../lib/tick.js'
 // Wallet-style stack: one card in front, others overlap above (newer) and below (older).
-// Move with wheel, drag/swipe, ↑/↓ keys, or by clicking a peeking card.
+// Move with wheel, drag/swipe, ↑/↓ keys, or by clicking a peeking card (or a dot). Each card that comes to the front ticks.
 export default function EntryStack({ entries, onEdit, onDelete, onColor, emptyText = 'No entries yet. Start today.' }) {
   const list = [...entries].sort((a, b) => b.date.localeCompare(a.date)), n = list.length
   const [a, setA] = useState(0), ref = useRef(null), acc = useRef(0), last = useRef(0)
   const go = (d) => setA(v => Math.max(0, Math.min(n - 1, v + d)))
   useEffect(() => { if (a > n - 1) setA(Math.max(0, n - 1)) }, [n])
+  // Tick whenever the front card changes — whatever moved it. Faster stepping = brighter, lighter ticks.
+  // (Skipped when the list itself changed, e.g. a delete, so only real browsing makes noise.)
+  const pace = useRef(null), seen = useRef({ a, n })
+  useEffect(() => {
+    const p = seen.current; seen.current = { a, n }
+    if (p.n === n && p.a !== a) tickRun(Math.abs(a - p.a), (pace.current ??= cadence())())
+  }, [a, n])
   useEffect(() => {
     const el = ref.current; if (!el) return
     const w = (e) => { // only capture the wheel while the stack can still move

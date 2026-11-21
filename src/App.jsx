@@ -8,8 +8,11 @@ import MouseFollower from './components/MouseFollower.jsx'
 import Toast from './components/Toast.jsx'
 import useEntries from './hooks/useEntries.js'
 import { todayISO } from './lib/storage.js'
+import { soundOn, setSound, tick } from './lib/tick.js'
 export default function App() {
   const { entries, save, update, remove, restore, undo, dismissUndo } = useEntries()
+  const [sound, setSoundState] = useState(soundOn)
+  const toggleSound = () => { const v = !sound; setSound(v); setSoundState(v); if (v) setTimeout(() => tick(0.4), 60) } // the click that turns it on also wakes the audio engine
   const now = new Date()
   const [picked, setPicked] = useState(null) // folder being opened (plays the open animation)
   const [ym, setYm] = useState(null)         // {y, m} while inside a folder; null = on the shelf
@@ -46,12 +49,13 @@ export default function App() {
   return (
     <main className="stage">
       <MouseFollower />
-      <header className="mono tiny"><span>DAILY.</span><span>MODE: STANDALONE</span><span>DATE: {now.getDate()} {now.toLocaleString('en', { month: 'short' }).toUpperCase()}</span></header>
+      <header className="mono tiny"><span>DAILY.</span><span>MODE: STANDALONE</span><span>DATE: {now.getDate()} {now.toLocaleString('en', { month: 'short' }).toUpperCase()}</span>
+        <button className="snd" aria-pressed={sound} title="Scroll sounds on / off" onClick={toggleSound}>SOUND: {sound ? 'ON' : 'OFF'}</button></header>
       <AnimatePresence mode="wait">
         {!ym ? (
           <motion.section key="shelf" className="home" exit={{ opacity: 0, scale: 1.12 }} transition={{ duration: 0.22 }}>
             <Shelf entries={entries} months={months} picked={picked} focus={last} onPick={pick} />
-            <p className="hint mono tiny">SCROLL SIDEWAYS ↔ CLICK A FOLDER TO OPEN</p>
+            <p className="hint mono tiny">DRAG OR SCROLL ↔ CLICK A FOLDER TO OPEN</p>
           </motion.section>
         ) : (
           <motion.section key="inside" className="inside" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, ease: 'easeOut' }}>
