@@ -13,9 +13,9 @@ const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Sideways row of month folders. Move it by: touch swipe / trackpad (native), mouse drag (click & drag, with a little
 // weight and friction), mouse wheel, ←/→, or the month dots underneath. Every folder that passes the centre ticks.
-export default function Shelf({ entries, months, picked, focus, onPick }) {
+export default function Shelf({ entries, months, picked, focus, onPick, locked }) {
   const ref = useRef(null), api = useRef({}), pickedRef = useRef(picked), now = new Date()
-  pickedRef.current = picked
+  pickedRef.current = picked || locked
   const [cur, setCur] = useState(() => { const f = months.findIndex(x => `${x.y}-${x.m}` === focus); return f < 0 ? months.length - 1 : f })
 
   useLayoutEffect(() => { // start centred on the folder we came from (or the newest month) — before first paint, so nothing jumps
@@ -44,7 +44,15 @@ export default function Shelf({ entries, months, picked, focus, onPick }) {
       const frame = (t) => { const k = clamp((t - t0) / ms, 0, 1); el.scrollLeft = from + (to - from) * ease(k); k < 1 ? (raf = requestAnimationFrame(frame)) : settle() }
       raf = requestAnimationFrame(frame)
     }
-    const jump = (i, ms) => { i = clamp(i, 0, count() - 1); goal = i; glide(geo().at(i), ms) }
+    // The tick used to fire when a folder crossed the centre, ~100 ms into the glide, which felt late. Now a move that starts from
+    // a wheel notch, an arrow key or a dot ticks immediately, and the crossing ticks for that glide stay quiet (`hush`).
+    let hush = 0
+    const jump = (i, ms, announce = true) => {
+      i = clamp(i, 0, count() - 1)
+      const from = goal < 0 ? near() : goal
+      if (announce && i !== from) { tickRun(Math.abs(i - from), clamp(0.3 + 0.12 * Math.abs(i - from))); hush = performance.now() + (ms || GLIDE_MS) + 60 }
+      goal = i; glide(geo().at(i), ms)
+    }
     const step = (d) => jump((goal < 0 ? near() : goal) + d) // rapid presses stack up on the pending target
     api.current.jump = (i) => jump(i, Math.min(900, GLIDE_MS + 70 * Math.abs(i - near())))
 
@@ -55,7 +63,7 @@ export default function Shelf({ entries, months, picked, focus, onPick }) {
       if (dt > 0) mv.v = mv.v * 0.4 + (Math.abs(x - mv.x) / dt) * 0.6 // px/ms, smoothed
       mv.x = x; mv.t = t
       const i = near()
-      if (i !== mv.i) { tickRun(Math.abs(i - mv.i), speedFromVelocity(mv.v)); mv.i = i; setCur(i) }
+      if (i !== mv.i) { if (performance.now() > hush) tickRun(Math.abs(i - mv.i), speedFromVelocity(mv.v)); mv.i = i; setCur(i) }
     }
 
     const wheel = (e) => {
@@ -97,7 +105,7 @@ export default function Shelf({ entries, months, picked, focus, onPick }) {
       const [t0, x0] = d.trail[0], [t1, x1] = d.trail[d.trail.length - 1]
       const v = e.timeStamp - t1 > 80 || t1 === t0 ? 0 : clamp((x1 - x0) / (t1 - t0), -3, 3) // px/ms at release
       const i = near(d.to + v * COAST_MS), dist = Math.abs(geo().at(i) - d.pos)
-      jump(i, clamp(3 * dist / Math.max(Math.abs(v), 0.5), 380, 900))
+      jump(i, clamp(3 * dist / Math.max(Math.abs(v), 0.5), 380, 900), false)
     }
     const click = (e) => { if (swallow) { e.stopPropagation(); e.preventDefault() } }
 

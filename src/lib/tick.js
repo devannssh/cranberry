@@ -14,28 +14,33 @@ export const soundOn = () => enabled
 export const setSound = (on) => { enabled = on; try { localStorage.setItem(KEY, on ? 'on' : 'off') } catch { /* ignore */ } }
 
 // One tick, scheduled at audio-clock time `t`. Takes the context so it can also be rendered offline (tests).
-export function voice(ac, dest, noiseBuf, t, speed) {
-  const s = clamp(speed), j = 1 + (Math.random() - 0.5) * 0.07
-  const vol = 0.95 - s * 0.12             // fast ticks are individually a touch lighter
-  const body = 700 * 2 ** (s * 1.4) * j   // 700 Hz → ~1850 Hz
-  const decay = 0.036 - s * 0.02          // 36 ms → 16 ms
+// Four layers, all short, so it reads as a crisp mechanical click rather than a soft thud:
+//   snap  : ~5 ms of high-passed noise, the bright edge you hear first
+//   click : a 10 ms triangle blip that falls a little, gives the click a pitch
+//   knock : a narrow, ringing band of noise (like a wood block), the "body"
+//   thump : a faint low sine, folders only, fading out as you speed up
+// kind 'folder' is a touch deeper and fuller, 'card' is lighter and snappier.
+export function voice(ac, dest, noiseBuf, t, speed, kind = 'folder') {
+  const s = clamp(speed), j = 1 + (Math.random() - 0.5) * 0.06, card = kind === 'card'
+  const vol = (card ? 0.85 : 0.95) - s * 0.1
   const env = (g, peak, attack, len) => {
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + len)
   }
-  const tone = (f0, f1, glide, peak, len) => {
-    const o = ac.createOscillator(), g = ac.createGain()
-    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + glide)
-    env(g, peak, 0.001, len); o.connect(g); g.connect(dest); o.start(t); o.stop(t + len + 0.01)
+  const burst = (type, freq, q, peak, attack, len) => {
+    const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain()
+    n.buffer = noiseBuf; f.type = type; f.frequency.value = freq; f.Q.value = q
+    env(g, peak, attack, len); n.connect(f); f.connect(g); g.connect(dest); n.start(t, Math.random() * 0.05); n.stop(t + len + 0.01)
   }
-  // 1 · the "tic": ~10 ms of band-passed noise
-  const n = ac.createBufferSource(), bp = ac.createBiquadFilter(), ng = ac.createGain()
-  n.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = (2600 + s * 3000) * j; bp.Q.value = 1.4
-  env(ng, vol * 1.1, 0.0005, 0.01)
-  n.connect(bp); bp.connect(ng); ng.connect(dest); n.start(t, Math.random() * 0.05); n.stop(t + 0.02)
-  // 2 · the body: a sine that falls a fifth in 12 ms
-  tone(body * 1.5, body, 0.012, vol, decay)
-  // 3 · weight: a soft low thump that fades out as you speed up
-  if (s < 0.6) tone(170 * j, 105, 0.03, vol * 0.7 * (1 - s / 0.6), 0.05)
+  const tone = (type, f0, f1, glide, peak, len) => {
+    const o = ac.createOscillator(), g = ac.createGain()
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + glide)
+    env(g, peak, 0.0008, len); o.connect(g); g.connect(dest); o.start(t); o.stop(t + len + 0.01)
+  }
+  burst('highpass', ((card ? 4300 : 3400) + s * 2200) * j, 0.7, vol * 1.15, 0.0002, 0.006)                  // snap
+  const click = ((card ? 3600 : 2700) + s * 1500) * j
+  tone('triangle', click, click * 0.7, 0.006, vol * 0.45, 0.014)                                              // click
+  burst('bandpass', (card ? 1900 : 1050) * 2 ** (s * 0.8) * j, 7, vol * 2.4, 0.0004, 0.026 - s * 0.01)       // knock
+  if (!card && s < 0.5) tone('sine', 150 * j, 95, 0.025, vol * 0.4 * (1 - s / 0.5), 0.045)                   // thump
 }
 
 function boot() {
@@ -61,13 +66,13 @@ function unlock() {
 if (typeof window !== 'undefined') for (const e of ['pointerdown', 'keydown', 'touchend', 'click']) addEventListener(e, unlock, { capture: true, passive: true })
 
 // speed 0 (slow) → 1 (fast); `delay` in seconds.
-export function tick(speed = 0.4, delay = 0) {
+export function tick(speed = 0.4, delay = 0, kind = 'folder') {
   if (!enabled || !ctx || ctx.state !== 'running') return // never queue while suspended, or they'd all fire at once on resume
-  voice(ctx, out, noise, ctx.currentTime + 0.004 + delay, speed)
+  voice(ctx, out, noise, ctx.currentTime + 0.001 + delay, speed, kind)
 }
-// Several cards at once (a dot-jump): a quick ratchet run, 32 ms apart, getting a little faster.
-export function tickRun(count, speed = 0.4) {
-  for (let i = 0; i < Math.min(count, 10); i++) tick(clamp(speed + i * 0.03), i * 0.032)
+// Several cards at once (a dot-jump): a quick ratchet run, 28 ms apart, getting a little faster.
+export function tickRun(count, speed = 0.4, kind = 'folder') {
+  for (let i = 0; i < Math.min(count, 10); i++) tick(clamp(speed + i * 0.03), i * 0.028, kind)
 }
 
 // Speed from how often the thing steps (cards in the stack): 70 ms apart ≈ 1, 600 ms+ ≈ 0.
