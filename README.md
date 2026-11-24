@@ -22,4 +22,3 @@ Keys: Esc closes composer/folder · ←/→ browse folders, or switch months ins
 
 **Motion** (GSAP, all skipped under `prefers-reduced-motion`; shared pieces live in `src/lib/fx.js`) — folder tiles assemble and "wake" as they cross the shelf centre (count-up, decoding labels, dot ripple, spinning chip) and float under the cursor; a date stamp with glyph confetti slams down when you save; a ticker under the shelf speeds up and leans with the scroll; the profile opens as a circle growing out of the navbar and its card morphs between the two looks; magnetic buttons, a hopping wordmark, a month label that decodes, a rattling text box at 160 characters.
 
-The app is called **cranberry** now. The default MongoDB database is still named `daily` on purpose, so existing local data keeps working; point `MONGODB_URI` at a new name if you want a fresh one. Fonts: Bricolage Grotesque (display) and DM Mono (labels).
